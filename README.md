@@ -44,7 +44,9 @@ Run this command in Copilot CLI with the [`platform-grouping` plugin](https://gi
 /platform-grouping:local-integration-testing
 ```
 
-The local fixture initializes and unseals a single-replica OpenBao and saves the root token and unseal key in the ignored `tests/kubernetes/.work/` directory. It is reachable at `https://openbao.localhost`.
+The fixtures, shared gateway, and verifiers live in [`pt-pneuma`](https://github.com/osinfra-io/pt-pneuma/tree/main/tests/integration) (`tests/integration`); this repository keeps only mocked tests.
+
+The local fixture initializes and unseals a single-replica OpenBao and saves the root token and unseal key in the ignored `.work/` directory of the Pneuma fixture. It is reachable at `https://openbao.localhost`.
 
 ## 📦 Release
 
