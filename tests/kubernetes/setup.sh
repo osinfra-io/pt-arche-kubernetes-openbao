@@ -66,8 +66,13 @@ bootstrap_openbao() {
     (
       umask 077
       kubectl exec --namespace=openbao openbao-0 -- \
-        bao operator init -key-shares=1 -key-threshold=1 -format=json >"${INIT_FILE}"
-    )
+        bao operator init -key-shares=1 -key-threshold=1 -format=json >"${INIT_FILE}.tmp"
+      jq -e '.unseal_keys_b64[0] and .root_token' "${INIT_FILE}.tmp" >/dev/null
+      mv "${INIT_FILE}.tmp" "${INIT_FILE}"
+    ) || {
+      rm -f "${INIT_FILE}.tmp"
+      fail "bao operator init did not produce a complete init file"
+    }
     status="$(openbao_status)"
   fi
 
