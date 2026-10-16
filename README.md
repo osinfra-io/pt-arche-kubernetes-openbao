@@ -41,7 +41,7 @@ tofu test
 Run this command in Copilot CLI with the [`platform-grouping` plugin](https://github.com/osinfra-io/pt-ai-plugins/tree/main/plugins/platform-grouping) installed:
 
 ```text
-/platform-grouping:test-pneuma-stack
+/platform-grouping:test-local-integration
 ```
 
 The local fixture initializes and unseals a single-replica OpenBao and saves the root token and unseal key in the ignored `tests/kubernetes/.work/` directory. It is reachable at `https://openbao.localhost`.
