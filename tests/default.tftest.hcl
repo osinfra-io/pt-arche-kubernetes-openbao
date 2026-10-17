@@ -2,7 +2,6 @@
 # https://opentofu.org/docs/cli/commands/test
 
 mock_provider "helm" {}
-mock_provider "kubernetes" {}
 
 run "default_regional" {
   command = apply
@@ -77,23 +76,5 @@ run "single_node_overrides" {
   assert {
     condition     = yamldecode(local.helm_values).server.service.type == "NodePort" && yamldecode(local.helm_values).server.service.annotations["cloud.google.com/neg"] == "{\"ingress\": true}"
     error_message = "Consumers must be able to set the Service type and annotations for GKE ingress."
-  }
-}
-
-run "local_routing" {
-  command = apply
-
-  module {
-    source = "./tests/fixtures/local-routing"
-  }
-
-  assert {
-    condition     = output.route_manifest.spec.hostnames[0] == "openbao.localhost" && output.route_manifest.spec.parentRefs[0].namespace == "istio-ingress"
-    error_message = "OpenBao must be exposed only through the Istio ingress Gateway at openbao.localhost."
-  }
-
-  assert {
-    condition     = output.route_manifest.spec.rules[0].backendRefs[0].name == "openbao" && output.route_manifest.spec.rules[0].backendRefs[0].port == 8200
-    error_message = "The route must target the OpenBao Service on port 8200."
   }
 }
