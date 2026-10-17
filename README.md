@@ -8,7 +8,7 @@ Reusable OpenTofu child module that deploys [OpenBao](https://openbao.org/) on G
 
 ## 🔩 Usage
 
-Create the namespace in the consuming root (label it `istio.io/dataplane-mode=ambient` for the mesh) and pass its name to `//regional`. The module does not create namespaces. `//regional/local` provides an optional Gateway API `HTTPRoute` for local testing. The repository root is not a consumable module.
+Create the namespace in the consuming root (label it `istio.io/dataplane-mode=ambient` for the mesh) and pass its name to `//regional`. The module does not create namespaces. The repository root is not a consumable module.
 
 > [!TIP]
 > You can check the [tests/fixtures](tests/fixtures) directory for example configurations. These fixtures set up the system for testing by providing all the necessary initial code, thus creating good examples on which to base your configurations.
