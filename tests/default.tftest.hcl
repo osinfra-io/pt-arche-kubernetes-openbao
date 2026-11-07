@@ -94,10 +94,18 @@ run "single_node_overrides" {
 
   variables {
     anti_affinity_enabled = false
-    namespace             = "openbao"
-    replicas              = 1
-    service_annotations   = { "cloud.google.com/neg" = "{\"ingress\": true}" }
-    service_type          = "NodePort"
+
+    labels = {
+      "app.kubernetes.io/instance" = "openbao"
+      "app.kubernetes.io/name"     = "openbao"
+      component                    = "server"
+      team                         = "platform"
+    }
+
+    namespace           = "openbao"
+    replicas            = 1
+    service_annotations = { "cloud.google.com/neg" = "{\"ingress\": true}" }
+    service_type        = "NodePort"
   }
 
   assert {
@@ -108,5 +116,16 @@ run "single_node_overrides" {
   assert {
     condition     = yamldecode(local.helm_values).server.service.type == "NodePort" && yamldecode(local.helm_values).server.service.annotations["cloud.google.com/neg"] == "{\"ingress\": true}"
     error_message = "Consumers must be able to set the Service type and annotations for GKE ingress."
+  }
+
+  assert {
+    condition = alltrue([
+      for key, value in var.labels :
+      yamldecode(helm_release.openbao.values[0]).server.extraLabels[key] == value
+      ]) && alltrue([
+      for key in keys(var.labels) :
+      !contains(keys(yamldecode(helm_release.openbao.values[0]).injector.extraLabels), key)
+    ])
+    error_message = "Caller labels must remain server-only so they cannot overwrite the injector's pod selector labels."
   }
 }

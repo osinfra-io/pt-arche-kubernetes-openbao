@@ -29,11 +29,11 @@ locals {
 
       enabled = true
 
-      extraLabels = merge(var.labels, {
+      extraLabels = {
         "tags.datadoghq.com/env"     = module.core_helpers.environment
         "tags.datadoghq.com/service" = "openbao-injector"
         "tags.datadoghq.com/version" = var.openbao_version
-      })
+      }
     }
 
     server = {
