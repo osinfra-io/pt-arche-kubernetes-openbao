@@ -28,6 +28,16 @@ run "high_availability_defaults" {
     source = "./regional"
   }
 
+  override_module {
+    target = module.core_helpers
+    outputs = {
+      env         = "prod"
+      environment = "production"
+      region      = "us-east1"
+      zone        = "b"
+    }
+  }
+
   variables {
     namespace = "caller-owned-openbao"
   }
@@ -51,6 +61,28 @@ run "high_availability_defaults" {
     condition     = yamldecode(local.helm_values).server.service.type == "ClusterIP"
     error_message = "OpenBao must default to an internal ClusterIP Service."
   }
+
+  assert {
+    condition = alltrue([
+      for component, service in { server = "openbao", injector = "openbao-injector" } :
+      yamldecode(helm_release.openbao.values[0])[component].extraLabels == {
+        "tags.datadoghq.com/env"     = "production"
+        "tags.datadoghq.com/service" = service
+        "tags.datadoghq.com/version" = var.openbao_version
+      }
+    ])
+    error_message = "OpenBao server and injector must carry full unified tags with their distinct lowercase service identities."
+  }
+
+  assert {
+    condition = alltrue([
+      for container, component in { openbao = "server", sidecar-injector = "injector" } :
+      jsondecode(yamldecode(helm_release.openbao.values[0])[component].annotations["ad.datadoghq.com/${container}.logs"])[0].source == "vault" &&
+      jsondecode(yamldecode(helm_release.openbao.values[0])[component].annotations["ad.datadoghq.com/${container}.logs"])[0].service ==
+      yamldecode(helm_release.openbao.values[0])[component].extraLabels["tags.datadoghq.com/service"]
+    ])
+    error_message = "OpenBao log autodiscovery must target each real container, preserve the native Vault source, and agree with its service labels."
+  }
 }
 
 run "single_node_overrides" {
@@ -62,10 +94,18 @@ run "single_node_overrides" {
 
   variables {
     anti_affinity_enabled = false
-    namespace             = "openbao"
-    replicas              = 1
-    service_annotations   = { "cloud.google.com/neg" = "{\"ingress\": true}" }
-    service_type          = "NodePort"
+
+    labels = {
+      "app.kubernetes.io/instance" = "openbao"
+      "app.kubernetes.io/name"     = "openbao"
+      component                    = "server"
+      team                         = "platform"
+    }
+
+    namespace           = "openbao"
+    replicas            = 1
+    service_annotations = { "cloud.google.com/neg" = "{\"ingress\": true}" }
+    service_type        = "NodePort"
   }
 
   assert {
@@ -76,5 +116,16 @@ run "single_node_overrides" {
   assert {
     condition     = yamldecode(local.helm_values).server.service.type == "NodePort" && yamldecode(local.helm_values).server.service.annotations["cloud.google.com/neg"] == "{\"ingress\": true}"
     error_message = "Consumers must be able to set the Service type and annotations for GKE ingress."
+  }
+
+  assert {
+    condition = alltrue([
+      for key, value in var.labels :
+      yamldecode(helm_release.openbao.values[0]).server.extraLabels[key] == value
+      ]) && alltrue([
+      for key in keys(var.labels) :
+      !contains(keys(yamldecode(helm_release.openbao.values[0]).injector.extraLabels), key)
+    ])
+    error_message = "Caller labels must remain server-only so they cannot overwrite the injector's pod selector labels."
   }
 }
