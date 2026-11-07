@@ -18,17 +18,45 @@ locals {
 
   helm_values = yamlencode({
     injector = {
+      annotations = {
+        "ad.datadoghq.com/sidecar-injector.logs" = jsonencode([
+          {
+            service = "openbao-injector"
+            source  = "vault"
+          }
+        ])
+      }
+
       enabled = true
+
+      extraLabels = merge(var.labels, {
+        "tags.datadoghq.com/env"     = module.core_helpers.environment
+        "tags.datadoghq.com/service" = "openbao-injector"
+        "tags.datadoghq.com/version" = var.openbao_version
+      })
     }
 
     server = {
       affinity = local.affinity
 
+      annotations = {
+        "ad.datadoghq.com/openbao.logs" = jsonencode([
+          {
+            service = "openbao"
+            source  = "vault"
+          }
+        ])
+      }
+
       auditStorage = {
         enabled = true
       }
 
-      extraLabels = var.labels
+      extraLabels = merge(var.labels, {
+        "tags.datadoghq.com/env"     = module.core_helpers.environment
+        "tags.datadoghq.com/service" = "openbao"
+        "tags.datadoghq.com/version" = var.openbao_version
+      })
 
       ha = {
         enabled  = true
