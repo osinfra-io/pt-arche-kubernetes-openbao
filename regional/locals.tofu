@@ -16,7 +16,28 @@ locals {
           topologyKey: kubernetes.io/hostname
   EOT
 
+  raft_configuration = merge(
+    { enabled = true },
+    var.raft_configuration == "" ? {} : { config = var.raft_configuration }
+  )
+
+  server_annotations = merge(
+    {
+      "ad.datadoghq.com/openbao.logs" = jsonencode([
+        {
+          service = "openbao"
+          source  = "vault"
+        }
+      ])
+    },
+    var.server_annotations
+  )
+
   helm_values = yamlencode({
+    global = {
+      tlsDisable = var.tls_disable
+    }
+
     injector = {
       annotations = {
         "ad.datadoghq.com/sidecar-injector.logs" = jsonencode([
@@ -39,18 +60,15 @@ locals {
     server = {
       affinity = local.affinity
 
-      annotations = {
-        "ad.datadoghq.com/openbao.logs" = jsonencode([
-          {
-            service = "openbao"
-            source  = "vault"
-          }
-        ])
-      }
+      annotations = local.server_annotations
 
       auditStorage = {
         enabled = true
       }
+
+      configAnnotation = var.server_config_annotation
+
+      extraEnvironmentVars = var.server_extra_environment_vars
 
       extraLabels = merge(var.labels, {
         "tags.datadoghq.com/env"     = module.core_helpers.environment
@@ -58,13 +76,12 @@ locals {
         "tags.datadoghq.com/version" = var.openbao_version
       })
 
+      extraVolumes = var.server_extra_volumes
+
       ha = {
         enabled  = true
         replicas = var.replicas
-
-        raft = {
-          enabled = true
-        }
+        raft     = local.raft_configuration
       }
 
       resources = {
@@ -82,6 +99,13 @@ locals {
         annotations = var.service_annotations
         type        = var.service_type
       }
+
+      serviceAccount = {
+        annotations = var.server_service_account_annotations
+        name        = var.server_service_account_name
+      }
+
+      updateStrategyType = var.server_update_strategy_type
     }
 
     ui = {
