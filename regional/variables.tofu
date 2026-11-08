@@ -55,9 +55,10 @@ variable "openbao_version" {
 }
 
 variable "raft_configuration" {
-  description = "OpenBao HCL configuration for the Raft storage stanza"
+  description = "Complete OpenBao server HCL configuration for Raft mode, replacing the chart default; must include a listener, Raft storage, and any required service registration and seal settings"
   type        = string
   default     = ""
+  nullable    = false
 }
 
 variable "replicas" {
@@ -73,9 +74,9 @@ variable "server_annotations" {
 }
 
 variable "server_config_annotation" {
-  description = "Roll OpenBao server pods when the rendered configuration changes"
+  description = "Include a configuration checksum in the server pod template; automatic restarts also require RollingUpdate and a suitable unseal procedure"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "server_extra_environment_vars" {
@@ -106,9 +107,9 @@ variable "server_service_account_name" {
 }
 
 variable "server_update_strategy_type" {
-  description = "Update strategy used for the OpenBao server StatefulSet"
+  description = "Update strategy used for the OpenBao server StatefulSet; opt into RollingUpdate only with a suitable unseal procedure"
   type        = string
-  default     = "RollingUpdate"
+  default     = "OnDelete"
 }
 
 variable "service_annotations" {
@@ -127,4 +128,9 @@ variable "tls_disable" {
   description = "Disable TLS for OpenBao listeners"
   type        = bool
   default     = true
+
+  validation {
+    condition     = var.tls_disable || trimspace(var.raft_configuration) != ""
+    error_message = "Setting tls_disable to false requires a complete raft_configuration with a TLS-enabled listener, certificate/key paths, and Raft storage; supply the required certificate mounts separately."
+  }
 }
