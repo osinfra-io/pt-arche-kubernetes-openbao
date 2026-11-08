@@ -63,6 +63,11 @@ run "high_availability_defaults" {
   }
 
   assert {
+    condition     = yamldecode(local.helm_values).server.updateStrategyType == "OnDelete" && !yamldecode(local.helm_values).server.configAnnotation
+    error_message = "Manual-unseal deployments must not enable automatic rollouts or configuration checksums by default."
+  }
+
+  assert {
     condition = alltrue([
       for component, service in { server = "openbao", injector = "openbao-injector" } :
       yamldecode(helm_release.openbao.values[0])[component].extraLabels == {
@@ -128,4 +133,136 @@ run "single_node_overrides" {
     ])
     error_message = "Caller labels must remain server-only so they cannot overwrite the injector's pod selector labels."
   }
+}
+
+run "custom_server_configuration" {
+  command = plan
+
+  module {
+    source = "./regional"
+  }
+
+  override_module {
+    target = module.core_helpers
+    outputs = {
+      env         = "prod"
+      environment = "production"
+      region      = "us-east1"
+      zone        = "b"
+    }
+  }
+
+  variables {
+    namespace = "openbao"
+
+    raft_configuration = <<-EOT
+      ui = true
+
+      listener "tcp" {
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+        tls_cert_file = "/openbao/userconfig/openbao-tls/tls.crt"
+        tls_key_file = "/openbao/userconfig/openbao-tls/tls.key"
+      }
+
+      seal "gcpckms" {
+        crypto_key = "openbao"
+        key_ring = "openbao"
+        project = "pt-example"
+        region = "us"
+      }
+
+      storage "raft" {
+        path = "/openbao/data"
+      }
+
+      service_registration "kubernetes" {}
+    EOT
+
+    server_annotations = {
+      "ad.datadoghq.com/openbao.checks" = "{\"vault\":{\"instances\":[{\"api_url\":\"https://%%host%%:8200/v1\"}]}}"
+    }
+
+    server_config_annotation = true
+
+    server_extra_environment_vars = {
+      BAO_CACERT = "/openbao/userconfig/openbao-tls/ca.crt"
+    }
+
+    server_extra_volumes = [
+      {
+        name = "openbao-tls"
+        type = "secret"
+      }
+    ]
+
+    server_service_account_annotations = {
+      "iam.gke.io/gcp-service-account" = "openbao@example.iam.gserviceaccount.com"
+    }
+
+    server_service_account_name = "openbao"
+    server_update_strategy_type = "RollingUpdate"
+    service_annotations         = { "cloud.google.com/neg" = "{\"ingress\": true}" }
+    service_type                = "NodePort"
+    tls_disable                 = false
+  }
+
+  assert {
+    condition = (
+      yamldecode(local.helm_values).global.tlsDisable == false &&
+      yamldecode(local.helm_values).server.ha.raft.config == var.raft_configuration
+    )
+    error_message = "The module must support TLS-enabled OpenBao listeners and caller-supplied Raft configuration."
+  }
+
+  assert {
+    condition = (
+      yamldecode(local.helm_values).server.extraEnvironmentVars.BAO_CACERT == var.server_extra_environment_vars.BAO_CACERT &&
+      yamldecode(local.helm_values).server.extraVolumes[0] == var.server_extra_volumes[0] &&
+      yamldecode(local.helm_values).server.configAnnotation &&
+      yamldecode(local.helm_values).server.updateStrategyType == "RollingUpdate"
+    )
+    error_message = "The module must support TLS certificate mounts, environment variables, and configuration-triggered rollouts."
+  }
+
+  assert {
+    condition = (
+      yamldecode(local.helm_values).server.serviceAccount.name == var.server_service_account_name &&
+      yamldecode(local.helm_values).server.serviceAccount.annotations["iam.gke.io/gcp-service-account"] == "openbao@example.iam.gserviceaccount.com" &&
+      yamldecode(local.helm_values).server.annotations["ad.datadoghq.com/openbao.checks"] == var.server_annotations["ad.datadoghq.com/openbao.checks"] &&
+      yamldecode(local.helm_values).server.service.type == "NodePort"
+    )
+    error_message = "The module must expose workload identity, Datadog, and GKE service configuration."
+  }
+}
+
+run "tls_requires_custom_server_configuration" {
+  command = plan
+
+  module {
+    source = "./regional"
+  }
+
+  variables {
+    namespace   = "openbao"
+    tls_disable = false
+  }
+
+  expect_failures = [var.tls_disable]
+}
+
+run "tls_rejects_blank_server_configuration" {
+  command = plan
+
+  module {
+    source = "./regional"
+  }
+
+  variables {
+    namespace          = "openbao"
+    raft_configuration = " \n "
+    tls_disable        = false
+  }
+
+  expect_failures = [var.tls_disable]
 }
